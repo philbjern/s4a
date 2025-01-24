@@ -1,77 +1,68 @@
 package pl.philbjern;
-
 import java.io.*;
 import java.util.*;
 
 public class AirlineManagement {
 
     static class Flight {
-        int maxPassengers;
-        int activeUntil;
+        TreeMap<Integer, Integer> passengerHistory = new TreeMap<>();
+        TreeMap<Integer, Boolean> activeState = new TreeMap<>();
 
-        Flight(int maxPassengers, int activeUntil) {
-            this.maxPassengers = maxPassengers;
-            this.activeUntil = activeUntil;
+        void updatePassengers(int day, int passengers) {
+//            System.out.printf("Updating passengers: day=%d, passengers=%d%n", day, passengers);
+
+            // Update the value for the given day
+            passengerHistory.put(day, passengers);
+
+            // Fill in subsequent days if not already defined
+            Map.Entry<Integer, Integer> nextEntry = passengerHistory.higherEntry(day);
+            if (nextEntry == null) {
+                passengerHistory.put(day + 1, passengers);
+            }
+
+            activeState.putIfAbsent(day, true); // Assume active unless explicitly deactivated
+//            System.out.printf("Passenger history after update: %s%n", passengerHistory);
         }
-    }
 
-    static class SegmentTree {
-        private final int[] tree;
-        private final int size;
-
-        SegmentTree(int n) {
-            size = n;
-            tree = new int[4 * n];
+        void deactivateFromDay(int day) {
+//            System.out.printf("Deactivating flight from day=%d%n", day);
+            activeState.put(day, false);
+//            System.out.printf("Active state after deactivation: %s%n", activeState);
         }
 
-        void update(int idx, int value, int node, int start, int end) {
-            if (start == end) {
-                tree[node] = value;
-            } else {
-                int mid = (start + end) / 2;
-                int leftNode = 2 * node + 1;
-                int rightNode = 2 * node + 2;
-                if (idx <= mid) {
-                    update(idx, value, leftNode, start, mid);
-                } else {
-                    update(idx, value, rightNode, mid + 1, end);
+        void activateFromDay(int day, int passengers) {
+//            System.out.printf("Activating flight: day=%d, passengers=%d%n", day, passengers);
+            passengerHistory.put(day, passengers);
+            activeState.put(day, true);
+//            System.out.printf("Passenger history after activation: %s%n", passengerHistory);
+//            System.out.printf("Active state after activation: %s%n", activeState);
+        }
+
+        int getPassengers(int day) {
+            int totalPassengers = 0;
+//            System.out.printf("Calculating cumulative passengers for day=%d%n, for flight=%s", day, this.toString());
+
+            for (Map.Entry<Integer, Integer> entry : passengerHistory.entrySet()) {
+                int recordedDay = entry.getKey();
+                if (recordedDay > day) break;
+
+                Map.Entry<Integer, Boolean> activeEntry = activeState.floorEntry(recordedDay);
+                if (activeEntry != null && activeEntry.getValue()) {
+//                    System.out.printf("Adding passengers from day=%d: %d%n", recordedDay, entry.getValue());
+                    totalPassengers += entry.getValue();
                 }
-                tree[node] = tree[leftNode] + tree[rightNode];
             }
-        }
 
-        void update(int idx, int value) {
-            update(idx, value, 0, 0, size - 1);
-        }
-
-        int query(int l, int r, int node, int start, int end) {
-            if (start > r || end < l) {
-                return 0;
-            }
-            if (l <= start && end <= r) {
-                return tree[node];
-            }
-            int mid = (start + end) / 2;
-            int leftQuery = query(l, r, 2 * node + 1, start, mid);
-            int rightQuery = query(l, r, 2 * node + 2, mid + 1, end);
-            return leftQuery + rightQuery;
-        }
-
-        int query(int l, int r) {
-            return query(l, r, 0, 0, size - 1);
+//            System.out.printf("Total passengers up to day=%d: %d%n", day, totalPassengers);
+            return totalPassengers;
         }
 
         @Override
         public String toString() {
-            StringBuilder sb = new StringBuilder("SegmentTree: [");
-            for (int i = 0; i < tree.length; i++) {
-                sb.append(tree[i]);
-                if (i < tree.length - 1) {
-                    sb.append(", ");
-                }
-            }
-            sb.append("]");
-            return sb.toString();
+            return "Flight{" +
+                    "passengerHistory=" + passengerHistory +
+                    ", activeState=" + activeState +
+                    '}';
         }
     }
 
@@ -84,100 +75,63 @@ public class AirlineManagement {
         int q = Integer.parseInt(firstLine[1]);
 
         String[] passengersLine = br.readLine().split(" ");
-
         Flight[] flights = initializeFlights(n, passengersLine);
-        SegmentTree segmentTree = initializeSegmentTree(n, flights);
 
-        processQueries(br, pw, q, flights, segmentTree);
+        for (int queryIdx = 0; queryIdx < q; queryIdx++) {
+            String line = br.readLine();
+            if (line == null || line.isBlank()) {
+//                System.out.println("Input ended unexpectedly.");
+                break;
+            }
+            String[] query = line.split(" ");
+//            System.out.println("Processing query: " + Arrays.toString(query));
+            char type = query[0].charAt(0);
+            int i = Integer.parseInt(query[1]) - 1;
+
+            switch (type) {
+                case 'P': {
+                    int p = Integer.parseInt(query[2]);
+                    int t = Integer.parseInt(query[3]);
+                    flights[i].updatePassengers(t, p);
+                    break;
+                }
+                case 'C': {
+                    int t = Integer.parseInt(query[2]);
+                    flights[i].deactivateFromDay(t);
+                    break;
+                }
+                case 'A': {
+                    int p = Integer.parseInt(query[2]);
+                    int t = Integer.parseInt(query[3]);
+                    flights[i] = new Flight();
+                    flights[i].activateFromDay(t, p);
+                    break;
+                }
+                case 'Q': {
+                    int j = Integer.parseInt(query[2]) - 1;
+                    int t = Integer.parseInt(query[3]);
+                    int sum = 0;
+//                    System.out.printf("*** Query: from=%d to=%d up to day=%d%n", i, j, t);
+                    for (int idx = i; idx <= j; idx++) {
+                        sum += flights[idx].getPassengers(t);
+                    }
+                    pw.println(sum);
+                    break;
+                }
+            }
+        }
 
         pw.flush();
+        pw.close();
     }
 
     private static Flight[] initializeFlights(int n, String[] passengersLine) {
         Flight[] flights = new Flight[n];
         for (int i = 0; i < n; i++) {
-            int maxPassengers = Integer.parseInt(passengersLine[i]);
-            flights[i] = new Flight(maxPassengers, Integer.MAX_VALUE);
+            flights[i] = new Flight();
+            flights[i].updatePassengers(0, Integer.parseInt(passengersLine[i]));
+//            System.out.printf("Initialized flight %d: %s%n", i + 1, flights[i]);
         }
         return flights;
-    }
-
-    private static SegmentTree initializeSegmentTree(int n, Flight[] flights) {
-        SegmentTree segmentTree = new SegmentTree(n);
-        for (int i = 0; i < n; i++) {
-            segmentTree.update(i, flights[i].maxPassengers);
-        }
-        return segmentTree;
-    }
-
-    private static void processQueries(BufferedReader br, PrintWriter pw, int q, Flight[] flights, SegmentTree segmentTree) throws IOException {
-        while (q-- > 0) {
-            String[] query = br.readLine().split(" ");
-
-            char type = query[0].charAt(0);
-            int i = Integer.parseInt(query[1]) - 1;
-
-            switch (type) {
-                case 'P':
-                    processUpdatePassengerQuery(query, flights, segmentTree, i);
-                    break;
-                case 'C':
-                    processDeactivateFlightQuery(query, flights, segmentTree, i);
-                    break;
-                case 'A':
-                    processAssignNewFlightQuery(query, flights, segmentTree, i);
-                    break;
-                case 'Q':
-                    processSumQuery(query, pw, flights, segmentTree, i);
-                    break;
-            }
-        }
-    }
-
-    private static void processUpdatePassengerQuery(String[] query, Flight[] flights, SegmentTree segmentTree, int i) {
-        int p = Integer.parseInt(query[2]);
-        int t = Integer.parseInt(query[3]);
-        if (flights[i].activeUntil > t) {
-            flights[i].maxPassengers = p;
-            segmentTree.update(i, p);
-        }
-    }
-
-    private static void processDeactivateFlightQuery(String[] query, Flight[] flights, SegmentTree segmentTree, int i) {
-        int t = Integer.parseInt(query[2]);
-        if (flights[i].activeUntil > t) {
-            flights[i].activeUntil = t;
-        }
-    }
-
-    private static void processAssignNewFlightQuery(String[] query, Flight[] flights, SegmentTree segmentTree, int i) {
-        int p = Integer.parseInt(query[2]);
-        flights[i] = new Flight(p, Integer.MAX_VALUE);
-        segmentTree.update(i, p);
-    }
-
-    private static void processSumQuery(String[] query, PrintWriter pw, Flight[] flights, SegmentTree segmentTree, int i) {
-        int j = Integer.parseInt(query[2]) - 1;
-        int t = Integer.parseInt(query[3]);
-        int sum = calculateSumForActiveFlights(flights, segmentTree, i, j, t);
-        pw.println(sum);
-    }
-
-    private static int calculateSumForActiveFlights(Flight[] flights, SegmentTree segmentTree, int i, int j, int t) {
-        // Rebuild the segment tree temporarily to account for activeUntil
-        int sum = 0;
-        for (int idx = i; idx <= j; idx++) {
-            if (flights[idx].activeUntil <= t) {
-                segmentTree.update(idx, 0); // Mark inactive flights
-            }
-        }
-        sum = segmentTree.query(i, j); // Query the active range
-        for (int idx = i; idx <= j; idx++) {
-            if (flights[idx].activeUntil > t) {
-                segmentTree.update(idx, flights[idx].maxPassengers); // Restore active flights
-            }
-        }
-
-        return sum;
     }
 }
