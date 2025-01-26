@@ -5,55 +5,151 @@ import java.util.*;
 
 public class AirlineManagement {
 
-    static class Flight {
-        TreeMap<Integer, Integer> passengerHistory = new TreeMap<>();
-        TreeMap<Integer, Boolean> activeState = new TreeMap<>();
+    static class SegmentTree {
+        int n;
+        SegmentTreeNode[] tree;
+        static boolean DEBUG = "true".equalsIgnoreCase(System.getenv("DEBUG"));
 
-        void updatePassengers(int day, int passengers) {
-            passengerHistory.put(day, passengers);
-            activeState.putIfAbsent(day, true); // Assume active unless explicitly deactivated
+        SegmentTree(int size) {
+            this.n = size;
+            this.tree = new SegmentTreeNode[4 * n];
+            for (int i = 0; i < tree.length; i++) {
+                tree[i] = new SegmentTreeNode();
+            }
         }
 
-        void deactivateFromDay(int day) {
-            activeState.put(day, false);
+        void build(int[] passengers, int node, int start, int end) {
+            if (start == end) {
+                tree[node].sum = passengers[start];
+                tree[node].active = true;
+            } else {
+                int mid = (start + end) / 2;
+                build(passengers, 2 * node + 1, start, mid);
+                build(passengers, 2 * node + 2, mid + 1, end);
+                tree[node].sum = tree[2 * node + 1].sum + tree[2 * node + 2].sum;
+                tree[node].active = true;
+            }
         }
 
-        void activateFromDay(int day, int passengers) {
-            passengerHistory.put(day, passengers);
-            activeState.put(day, true);
-        }
+        void updateCapacity(int node, int start, int end, int l, int r, int value) {
+            applyLazy(node, start, end);
 
-        int getCumulativePassengers(int day) {
-            int sum = 0;
-            int lastPassengers = 0;
-            boolean isActive = true;
-
-            for (int d = 0; d <= day; d++) {
-                // Update passengers if there's a record for the day
-                if (passengerHistory.containsKey(d)) {
-                    lastPassengers = passengerHistory.get(d);
-                }
-
-                // Update active state if there's a state change for the day
-                if (activeState.containsKey(d)) {
-                    isActive = activeState.get(d);
-                }
-
-                // Sum passengers only if active
-                if (isActive) {
-                    sum += lastPassengers;
-                }
+            if (start > r || end < l) {
+                return;
             }
 
-            return sum;
+            if (start >= l && end <= r) {
+                tree[node].lazy += value;
+                applyLazy(node, start, end);
+                if (DEBUG) {
+                    System.out.println("Updated capacity: Node=" + node + ", Range=[" + start + "," + end + "]");
+                    System.out.println(this);
+                }
+                return;
+            }
+
+            int mid = (start + end) / 2;
+            updateCapacity(2 * node + 1, start, mid, l, r, value);
+            updateCapacity(2 * node + 2, mid + 1, end, l, r, value);
+
+            tree[node].sum = calculateSum(node);
+        }
+
+        void updateActivation(int node, int start, int end, int l, int r, boolean activate) {
+            applyLazy(node, start, end);
+
+            if (start > r || end < l) {
+                return;
+            }
+
+            if (start >= l && end <= r) {
+                tree[node].lazyActive = activate;
+                applyLazy(node, start, end);
+                if (DEBUG) {
+                    System.out.println("Updated activation: Node=" + node + ", Range=[" + start + "," + end + "]");
+                    System.out.println(this);
+                }
+                return;
+            }
+
+            int mid = (start + end) / 2;
+            updateActivation(2 * node + 1, start, mid, l, r, activate);
+            updateActivation(2 * node + 2, mid + 1, end, l, r, activate);
+
+            tree[node].sum = calculateSum(node);
+        }
+
+        int query(int node, int start, int end, int l, int r) {
+            applyLazy(node, start, end);
+
+            if (start > r || end < l) {
+                return 0;
+            }
+
+            if (start >= l && end <= r) {
+                if (DEBUG) {
+                    System.out.println("Query: Node=" + node + ", Range=[" + start + "," + end + "] -> Sum=" + (tree[node].active ? tree[node].sum : 0));
+                }
+                return tree[node].active ? tree[node].sum : 0;
+            }
+
+            int mid = (start + end) / 2;
+            int leftSum = query(2 * node + 1, start, mid, l, r);
+            int rightSum = query(2 * node + 2, mid + 1, end, l, r);
+            return leftSum + rightSum;
+        }
+
+        void applyLazy(int node, int start, int end) {
+            if (tree[node].lazyActive != null) {
+                tree[node].active = tree[node].lazyActive;
+                tree[node].lazyActive = null;
+            }
+
+            if (tree[node].lazy != 0) {
+                if (tree[node].active) {
+                    tree[node].sum += tree[node].lazy * (end - start + 1);
+                }
+
+                if (start != end) {
+                    tree[2 * node + 1].lazy += tree[node].lazy;
+                    tree[2 * node + 2].lazy += tree[node].lazy;
+                }
+
+                tree[node].lazy = 0;
+            }
+        }
+
+        int calculateSum(int node) {
+            return tree[node].active ? tree[2 * node + 1].sum + tree[2 * node + 2].sum : 0;
         }
 
         @Override
         public String toString() {
-            return "Flight{" +
-                    "passengerHistory=" + passengerHistory +
-                    ", activeState=" + activeState +
-                    '}';
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < tree.length; i++) {
+                if (tree[i] != null) {
+                    sb.append("Node ").append(i).append(": ")
+                            .append("sum=").append(tree[i].sum).append(", ")
+                            .append("active=").append(tree[i].active).append(", ")
+                            .append("lazy=").append(tree[i].lazy).append(", ")
+                            .append("lazyActive=").append(tree[i].lazyActive).append("\n");
+                }
+            }
+            return sb.toString();
+        }
+    }
+
+    static class SegmentTreeNode {
+        int sum;
+        boolean active;
+        int lazy;
+        Boolean lazyActive;
+
+        SegmentTreeNode() {
+            this.sum = 0;
+            this.active = true;
+            this.lazy = 0;
+            this.lazyActive = null;
         }
     }
 
@@ -66,54 +162,39 @@ public class AirlineManagement {
         int q = Integer.parseInt(firstLine[1]);
 
         String[] passengersLine = br.readLine().split(" ");
-        Flight[] flights = initializeFlights(n, passengersLine);
+        int[] passengers = Arrays.stream(passengersLine).mapToInt(Integer::parseInt).toArray();
 
-        for (int queryIdx = 0; queryIdx < q; queryIdx++) {
+        SegmentTree segmentTree = new SegmentTree(n);
+        segmentTree.build(passengers, 0, 0, n - 1);
+
+        for (int i = 0; i < q; i++) {
             String[] query = br.readLine().split(" ");
             char type = query[0].charAt(0);
-            int i = Integer.parseInt(query[1]) - 1;
+            int l = Integer.parseInt(query[1]) - 1;
 
             switch (type) {
-                case 'P': {
+                case 'P':
                     int p = Integer.parseInt(query[2]);
-                    int t = Integer.parseInt(query[3]);
-                    flights[i].updatePassengers(t, p);
+                    int r = Integer.parseInt(query[3]) - 1;
+                    segmentTree.updateCapacity(0, 0, n - 1, l, r, p);
                     break;
-                }
-                case 'C': {
-                    int t = Integer.parseInt(query[2]);
-                    flights[i].deactivateFromDay(t);
+                case 'C':
+                    int t = Integer.parseInt(query[2]) - 1;
+                    segmentTree.updateActivation(0, 0, n - 1, l, t, false);
                     break;
-                }
-                case 'A': {
-                    int p = Integer.parseInt(query[2]);
-                    int t = Integer.parseInt(query[3]);
-                    flights[i].activateFromDay(t, p);
+                case 'Q':
+                    int rQuery = Integer.parseInt(query[2]) - 1;
+                    int result = segmentTree.query(0, 0, n - 1, l, rQuery);
+                    pw.println(result);
                     break;
-                }
-                case 'Q': {
-                    int j = Integer.parseInt(query[2]) - 1;
-                    int t = Integer.parseInt(query[3]);
-                    int sum = 0;
-                    for (int idx = i; idx <= j; idx++) {
-                        sum += flights[idx].getCumulativePassengers(t);
-                    }
-                    pw.println(sum);
-                    break;
-                }
+            }
+
+            if (SegmentTree.DEBUG) {
+                System.out.println("After operation " + type + ":\n" + segmentTree);
             }
         }
 
         pw.flush();
         pw.close();
-    }
-
-    private static Flight[] initializeFlights(int n, String[] passengersLine) {
-        Flight[] flights = new Flight[n];
-        for (int i = 0; i < n; i++) {
-            flights[i] = new Flight();
-            flights[i].updatePassengers(0, Integer.parseInt(passengersLine[i]));
-        }
-        return flights;
     }
 }
