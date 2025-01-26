@@ -12,7 +12,6 @@ public class AirlineManagementTest {
 
     @Test
     public void testAirlineManagementSampleData1() throws Exception {
-        // Test input as per the example
         String input = """
                 5 7
                 1 2 3 2 4
@@ -38,17 +37,14 @@ public class AirlineManagementTest {
 
         AirlineManagement.main(new String[0]);
 
-        // Capture actual output
         String actualOutput = outputStream.toString().trim();
 
-        // Include detailed error message on failure
         assertEquals(expectedOutput.trim(), actualOutput,
                 String.format("Output mismatch:%nExpected:%n%s%nActual:%n%s%n", expectedOutput.trim(), actualOutput));
     }
 
     @Test
     public void testAirlineManagementSampleData2() throws Exception {
-        // Test input as per the example
         String input = """
                 1 7
                 2
@@ -75,10 +71,8 @@ public class AirlineManagementTest {
 
         AirlineManagement.main(new String[0]);
 
-        // Capture actual output
         String actualOutput = outputStream.toString().trim();
 
-        // Include detailed error message on failure
         assertEquals(expectedOutput.trim(), actualOutput,
                 String.format("Output mismatch:%nExpected:%n%s%nActual:%n%s%n", expectedOutput.trim(), actualOutput));
 
